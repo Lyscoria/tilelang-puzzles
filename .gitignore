@@ -117,3 +117,5 @@ maint/host_checks/logs/*
 
 # csv
 *.csv
+
+tilelang_env/

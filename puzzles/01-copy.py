@@ -104,7 +104,8 @@ def tl_copy_1d_multi_threads(A):
     A: T.Tensor((N,), T.float16)
     B = T.empty((N,), T.float16)
 
-    # TODO: Implement this function
+    with T.Kernel(1, threads=128) as _:
+        T.copy(A, B)
 
     return B
 
@@ -151,7 +152,9 @@ def tl_copy_1d_parallel(A, BLOCK_N: int):
     A: T.Tensor((N,), T.float16)
     B = T.empty((N,), T.float16)
 
-    # TODO: Implement this function
+    with T.Kernel(N // BLOCK_N, threads=128) as bx:
+        start = bx * BLOCK_N
+        T.copy(A[start:start+BLOCK_N], B[start:start+BLOCK_N])
 
     return B
 
