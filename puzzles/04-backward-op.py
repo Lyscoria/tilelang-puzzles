@@ -54,7 +54,18 @@ def tl_mul_relu_bcast(A, B, BLOCK_N: int, BLOCK_M: int):
     B: T.Tensor((M,), dtype)
     C = T.empty((N, M), dtype)
 
-    # TODO: Implement this function
+    with T.Kernel(N // BLOCK_N, M // BLOCK_M, threads=256) as (bx, by):
+        A_frag = T.alloc_fragment((BLOCK_N, BLOCK_M), dtype)
+        B_frag = T.alloc_fragment((BLOCK_M,), dtype)
+        C_frag = T.alloc_fragment((BLOCK_N, BLOCK_M), dtype)
+        start_x = BLOCK_N * bx
+        start_y = BLOCK_M * by
+        T.copy(A[start_x, start_y], A_frag)
+        T.copy(B[start_y], B_frag)
+        for i, j in T.Parallel(BLOCK_N, BLOCK_M):
+            res = A_frag[i, j] * B_frag[j]
+            C_frag[i, j] = T.if_then_else(res > 0, res, 0)
+        T.copy(C_frag, C[start_x, start_y])
 
     return C
 
@@ -128,7 +139,19 @@ def tl_mul_relu_bwd(A, B, dC, BLOCK_N: int, BLOCK_M: int):
     dC: T.Tensor((N, M), dtype)
     dA = T.empty((N, M), dtype)
 
-    # TODO: Implement this function
+    with T.Kernel(N // BLOCK_N, M // BLOCK_M, threads=256) as (bx, by):
+        A_frag = T.alloc_fragment((BLOCK_N, BLOCK_M), dtype)
+        dC_frag = T.alloc_fragment((BLOCK_N, BLOCK_M), dtype)
+        B_frag = T.alloc_fragment((BLOCK_M,), dtype)
+        dA_frag = T.alloc_fragment((BLOCK_N, BLOCK_M), dtype)
+        start_x = BLOCK_N * bx
+        start_y = BLOCK_M * by
+        T.copy(A[start_x, start_y], A_frag)
+        T.copy(dC[start_x, start_y], dC_frag)
+        T.copy(B[start_y], B_frag)
+        for i, j in T.Parallel(BLOCK_N, BLOCK_M):
+            dA_frag[i, j] = dC_frag[i, j] * B_frag[j] * (A_frag[i, j] * B_frag[j] > 0)
+        T.copy(dA_frag, dA[start_x, start_y])
 
     return dA
 
