@@ -81,7 +81,43 @@ def tl_scalar_flash_attn(Q, K, V, BLOCK_B: int, BLOCK_S: int):
     V: T.Tensor((B, S), dtype)
     O = T.empty((B, S), dtype)
 
-    # TODO: Implement this function
+    with T.Kernel(BLOCK_B, threads=256) as bx:
+        Q_local = T.alloc_fragment((BLOCK_B, BLOCK_S), dtype)
+        K_local = T.alloc_fragment((BLOCK_B, BLOCK_S), dtype)
+        V_local = T.alloc_fragment((BLOCK_B, BLOCK_S), dtype)
+        O_local = T.alloc_fragment((BLOCK_B, BLOCK_S), dtype)
+        QK_local = T.alloc_fragment((BLOCK_B, BLOCK_S), dtype)
+        EXP = T.alloc_fragment((BLOCK_B, BLOCK_S), dtype)
+        MAX = T.alloc_fragment((BLOCK_B,), dtype)
+        SUM = T.alloc_fragment((BLOCK_B,), dtype)
+        LSE = T.alloc_fragment((BLOCK_B,), dtype)
+        T.fill(LSE, -T.infinity(dtype))
+        start_x = bx * BLOCK_B
+
+        for by in T.Serial(S // BLOCK_S):
+            start_y = by * BLOCK_S
+            T.copy(Q[start_x, start_y], Q_local)
+            T.copy(K[start_x, start_y], K_local)
+
+            for i, j in T.Parallel(BLOCK_B, BLOCK_S):
+                QK_local[i, j] = Q_local[i, j] * K_local[i, j]
+            T.reduce_max(QK_local, MAX, dim=1, clear=True)
+            for i, j in T.Parallel(BLOCK_B, BLOCK_S):
+                EXP[i, j] = T.exp2((QK_local[i, j] - MAX[i]) * log2_e)
+            T.reduce_sum(EXP, SUM, dim=1, clear=True)
+            for i in T.Parallel(BLOCK_B):
+                LSE[i] = MAX[i] * log2_e + T.log2(SUM[i] + T.exp2(LSE[i] - MAX[i] * log2_e))
+
+        for by in T.Serial(S // BLOCK_S):
+            start_y = by * BLOCK_S
+            T.copy(Q[start_x, start_y], Q_local)
+            T.copy(K[start_x, start_y], K_local)
+            T.copy(V[start_x, start_y], V_local)
+
+            for i, j in T.Parallel(BLOCK_B, BLOCK_S):
+                O_local[i, j] = T.exp2(Q_local[i, j] * K_local[i, j] * log2_e - LSE[i]) * V_local[i, j]
+
+            T.copy(O_local, O[start_x, start_y])
 
     return O
 
