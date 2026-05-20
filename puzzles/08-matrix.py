@@ -62,7 +62,21 @@ def tl_gemv(A, B, BLOCK_M: int, BLOCK_K: int):
     B: T.Tensor((K,), dtype)
     C = T.empty((M,), dtype)
 
-    # TODO: Implement this function
+    with T.Kernel(M // BLOCK_M, threads=128) as bx:
+        A_local = T.alloc_fragment((BLOCK_M, BLOCK_K), dtype)
+        B_local = T.alloc_fragment((BLOCK_K,), dtype)
+        C_local = T.alloc_fragment((BLOCK_M,), accum_dtype)
+        AB_temp = T.alloc_fragment((BLOCK_M, BLOCK_K), accum_dtype)
+        T.clear(C_local)
+
+        for by in T.Serial(K // BLOCK_K):
+            T.copy(A[bx * BLOCK_M, by * BLOCK_K], A_local)
+            T.copy(B[by * BLOCK_K], B_local)
+            for i, j in T.Parallel(BLOCK_M, BLOCK_K):
+                AB_temp[i, j] = A_local[i, j].astype(accum_dtype) * B_local[j].astype(accum_dtype)
+            T.reduce_sum(AB_temp, C_local, dim=1, clear=False)
+        
+        T.copy(C_local, C[bx * BLOCK_M])
     
     return C
 
@@ -143,7 +157,18 @@ def tl_matmul_naive(A, B, BLOCK_M: int, BLOCK_N: int, BLOCK_K: int):
     B: T.Tensor((K, N), dtype)
     C = T.empty((M, N), dtype)
 
-    # TODO: Implement this function
+    with T.Kernel(M // BLOCK_M, N // BLOCK_N, threads=128) as (bm, bn):
+        A_local = T.alloc_fragment((BLOCK_M, BLOCK_K), dtype)
+        B_local = T.alloc_fragment((BLOCK_K, BLOCK_N), dtype)
+        C_local = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
+        T.clear(C_local)
+
+        for bk in T.Serial(K // BLOCK_K):
+            T.copy(A[bm * BLOCK_M, bk * BLOCK_K], A_local)
+            T.copy(B[bk * BLOCK_K, bn * BLOCK_N], B_local)
+            T.gemm(A_local, B_local, C_local)
+
+        T.copy(C_local, C[bm * BLOCK_M, bn * BLOCK_N])
 
     return C
 
@@ -217,7 +242,18 @@ def tl_matmul_opt(A, B, BLOCK_M: int, BLOCK_N: int, BLOCK_K: int):
     B: T.Tensor((K, N), dtype)
     C = T.empty((M, N), dtype)
 
-    # TODO: Implement this function
+    with T.Kernel(M // BLOCK_M, N // BLOCK_N, threads=128) as (bm, bn):
+        A_shared = T.alloc_shared((BLOCK_M, BLOCK_K), dtype)
+        B_shared = T.alloc_shared((BLOCK_K, BLOCK_N), dtype)
+        C_local = T.alloc_fragment((BLOCK_M, BLOCK_N), accum_dtype)
+        T.clear(C_local)
+
+        for bk in T.Pipelined(K // BLOCK_K, num_stages=3):
+            T.copy(A[bm * BLOCK_M, bk * BLOCK_K], A_shared)
+            T.copy(B[bk * BLOCK_K, bn * BLOCK_N], B_shared)
+            T.gemm(A_shared, B_shared, C_local)
+
+        T.copy(C_local, C[bm * BLOCK_M, bn * BLOCK_N])
 
     return C
 
