@@ -96,12 +96,12 @@ def tl_conv1d_naive(X, K, BLOCK_N: int, BLOCK_L: int):
     O = T.empty((N, L), dtype)
 
     with T.Kernel(T.ceildiv(N, BLOCK_N), T.ceildiv(L, BLOCK_L), threads=256) as (pid_n, pid_l):
-        X_shared = T.alloc_shared((BLOCK_N, BLOCK_L + KL - 1), dtype)
+        X_shared = T.alloc_shared((BLOCK_N, BLOCK_L + KL), dtype)
         K_local = T.alloc_fragment((KL,), dtype)
         O_local = T.alloc_shared((BLOCK_N,), accum_dtype)
         tmp = T.alloc_fragment((BLOCK_N, KL), accum_dtype)
 
-        for i, j in T.Parallel(BLOCK_N, BLOCK_L + KL - 1):
+        for i, j in T.Parallel(BLOCK_N, BLOCK_L + KL):
             X_shared[i, j] = T.if_then_else(
                 pid_n * BLOCK_N + i < N and pid_l * BLOCK_L + j < L,
                 X[pid_n * BLOCK_N + i, pid_l * BLOCK_L + j],
@@ -226,12 +226,12 @@ def tl_conv1d_multi_outchannel(X, K, BLOCK_N: int, BLOCK_L: int):
     O = T.empty((N, L, F), dtype)
 
     with T.Kernel(T.ceildiv(N, BLOCK_N), T.ceildiv(L, BLOCK_L), threads=256) as (pid_n, pid_l):
-        X_shared = T.alloc_shared((BLOCK_N, BLOCK_L + KL - 1), dtype)
+        X_shared = T.alloc_shared((BLOCK_N, BLOCK_L + KL), dtype)
         K_local = T.alloc_fragment((KL, F), dtype)
         O_local = T.alloc_fragment((BLOCK_N, F), accum_dtype)
         tmp = T.alloc_fragment((BLOCK_N, KL, F), accum_dtype)
 
-        for i, j in T.Parallel(BLOCK_N, BLOCK_L + KL - 1):
+        for i, j in T.Parallel(BLOCK_N, BLOCK_L + KL):
             X_shared[i, j] = T.if_then_else(
                 pid_n * BLOCK_N + i < N and pid_l * BLOCK_L + j < L,
                 X[pid_n * BLOCK_N + i, pid_l * BLOCK_L + j],
