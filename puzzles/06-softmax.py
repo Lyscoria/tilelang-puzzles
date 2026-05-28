@@ -108,8 +108,9 @@ def tl_softmax(A, BLOCK_N: int, BLOCK_M: int):
 
         for by in T.Serial(M // BLOCK_M):
             start_y = by * BLOCK_M
+            T.copy(A[start_x, start_y], A_local)
             for i, j in T.Parallel(BLOCK_N, BLOCK_M):
-                B_local[i, j] = T.exp2((A_local[i, j] - LSE[i]) * log2_e)
+                B_local[i, j] = T.exp2(A_local[i, j] * log2_e - LSE[i])
             T.copy(B_local, B[start_x, start_y])
 
     return B
