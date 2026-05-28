@@ -74,7 +74,7 @@ def test_puzzle(
     """Test a puzzle solution with given hyper parameters."""
 
     tl_kernel: JITKernel = puzzle_tl.compile(**tl_hyper_params)
-    # print(tl_kernel.get_kernel_source())
+    print(tl_kernel.get_kernel_source())
     # exit()
     inputs_in_torch_tensors = _torch_tensor_materialize(tl_kernel.params)
 
